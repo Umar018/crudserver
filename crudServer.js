@@ -1,10 +1,15 @@
 import http, { createServer } from "node:http";
 import url from "node:url";
+import fs from "node:fs";
 
-const books = [
-  { id: 1, name: "Sariq devni minib" },
-  { id: 2, name: "Chayon" }
-];
+const booksFile = "books.json";
+let books = [];
+try {
+  const data = fs.readFileSync(booksFile, "utf8");
+  books = JSON.parse(data) || [];
+} catch (error) {
+  console.error("Error reading books file:", error);
+}
 
 const PORT = 3000;
 const server = createServer((request, response) => {
@@ -18,42 +23,73 @@ const server = createServer((request, response) => {
     let body = "";
     request.on("data", (chunk) => (body += chunk));
     request.on("end", () => {
-      const data = JSON.parse(body);
-      const newBook = { id: books.length + 1, name: data.name };
-      books.push(newBook);
-      response.writeHead(201, { "Content-Type": "application/json" });
-      response.end(JSON.stringify(newBook));
+      try {
+        const data = JSON.parse(body);
+        if (!data.name) {
+          throw new Error("Book name is required");
+        }
+
+        const newBook = {
+          id: Math.floor(Math.random() * 100000),
+          name: data.name,
+        };
+        books.push(newBook);
+
+        fs.writeFileSync(booksFile, JSON.stringify(books, null, 2));
+
+        response.writeHead(201, { "Content-Type": "application/json" });
+        response.end(JSON.stringify(newBook));
+      } catch (error) {
+        response.writeHead(400, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ message: error.message }));
+      }
     });
   } else if (method === "PUT" && parsedUrl.pathname.startsWith("/books/")) {
     const id = parseInt(parsedUrl.pathname.split("/")[2]);
+
     let body = "";
     request.on("data", (chunk) => (body += chunk));
     request.on("end", () => {
-      const data = JSON.parse(body);
-      const book = books.find((b) => b.id === id);
-      if (!book) {
-        response.writeHead(404, { "Content-Type": "application/json" });
-        response.end(JSON.stringify({ message: "Book not found" }));
-        return;
+      try {
+        const data = JSON.parse(body);
+        if (!data.name) {
+          throw new Error("Book name is required");
+        }
+
+        const index = books.findIndex((b) => b.id === id);
+        if (index === -1) {
+          response.writeHead(404, { "Content-Type": "application/json" });
+          response.end(JSON.stringify({ message: "Book not found" }));
+          return;
+        }
+
+        books[index].name = data.name;
+
+        fs.writeFileSync(booksFile, JSON.stringify(books, null, 2));
+
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(JSON.stringify(books[index]));
+      } catch (error) {
+        response.writeHead(400, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ message: error.message }));
       }
-      book.name = data.name;
-      response.writeHead(200, { "Content-Type": "application/json" });
-      response.end(JSON.stringify(book));
     });
   } else if (method === "DELETE" && parsedUrl.pathname.startsWith("/books/")) {
     const id = parseInt(parsedUrl.pathname.split("/")[2]);
+
     const index = books.findIndex((b) => b.id === id);
     if (index === -1) {
       response.writeHead(404, { "Content-Type": "application/json" });
       response.end(JSON.stringify({ message: "Book not found" }));
       return;
     }
+
     books.splice(index, 1);
+
+    fs.writeFileSync(booksFile, JSON.stringify(books, null, 2));
+
     response.writeHead(200, { "Content-Type": "application/json" });
     response.end(JSON.stringify({ message: "Book deleted" }));
-  } else {
-    response.writeHead(404, { "Content-Type": "text/plain" });
-    response.end("Not found!");
   }
 });
 
